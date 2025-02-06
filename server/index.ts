@@ -1,11 +1,12 @@
 import { Hono } from 'hono';
 import { contextStorage } from 'hono/context-storage';
 
-import { createGeminiModel } from './llms/gemini';
+import { createLLMModel } from './llms';
 import { createSearchPrompt, SearchQueries } from './prompts/search';
 
 export type Env = {
   Bindings: {
+    LLM_PROVIDER: 'google';
     MODEL_NAME: string;
     API_KEY: string;
   };
@@ -22,7 +23,7 @@ app.get('/api/search', async (c) => {
   }
 
   try {
-    const model = createGeminiModel().withStructuredOutput(SearchQueries);
+    const model = createLLMModel().withStructuredOutput(SearchQueries);
     const promptText = createSearchPrompt(query);
     const response = await model.invoke(promptText);
     return c.json(response);
