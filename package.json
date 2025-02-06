@@ -9,6 +9,8 @@
     "typecheck": "react-router typegen && tsc"
   },
   "dependencies": {
+    "@langchain/core": "^0.3.38",
+    "@langchain/google-genai": "^0.1.8",
     "@react-router/node": "^7.1.5",
     "@react-router/serve": "^7.1.5",
     "hono": "^4.6.20",
@@ -16,7 +18,8 @@
     "isbot": "^5.1.17",
     "react": "^19.0.0",
     "react-dom": "^19.0.0",
-    "react-router": "^7.1.5"
+    "react-router": "^7.1.5",
+    "zod": "^3.24.1"
   },
   "devDependencies": {
     "@react-router/dev": "^7.1.5",
