@@ -5,7 +5,7 @@
 
 ## Overview
 
-Re-Search is a minimal sample project demonstrating web search enhanced by large language models (LLMs). It serves as an experimental prototype for exploring innovative search techniques.
+LLM-Search is a minimal sample project demonstrating web search enhanced by large language models (LLMs). It serves as an experimental prototype for exploring innovative search techniques.
 
 ## Installation
 
