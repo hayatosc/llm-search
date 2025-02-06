@@ -5,12 +5,15 @@ import { SearchQueries } from '../prompts/search';
 
 type SearchQueriesType = z.infer<typeof SearchQueries>;
 
+export type SearchResult = { theme: string; results: string[] };
+
 export class SearchBrowser {
   private browser: Browser | null = null;
 
   async initialize(): Promise<void> {
     this.browser = await chromium.launch({
-      headless: true,
+      channel: 'chrome',
+      headless: false, // reCAPTCHA対策
     });
   }
 
@@ -21,7 +24,7 @@ export class SearchBrowser {
     }
   }
 
-  async searchWithQueries(queries: SearchQueriesType): Promise<Array<{ theme: string; results: string[] }>> {
+  async searchWithQueries(queries: SearchQueriesType): Promise<Array<SearchResult>> {
     if (!this.browser) {
       throw new Error('Browser not initialized');
     }
@@ -31,7 +34,17 @@ export class SearchBrowser {
 
     try {
       // 言語設定の判定
-      const isJapaneseSearch = queries.searchConfig.lang === 'ja';
+      let searchLang: string;
+      switch (queries.searchConfig.lang) {
+        case 'ja':
+          searchLang = '&lr=lang_ja';
+          break;
+        case 'en':
+          searchLang = '&lr=lang_en';
+          break;
+        default:
+          searchLang = '';
+      }
 
       for (const query of queries.searchThemes) {
         const page = await context.newPage();
@@ -41,42 +54,36 @@ export class SearchBrowser {
 
         for (const searchQuery of searchAttempts) {
           try {
-            // 言語に基づいてGoogle検索URLを設定
-            const googleUrl = 'https://www.google.com/search?q=' + encodeURIComponent(searchQuery) + (isJapaneseSearch ? '&lr=lang_ja' : '');
+            const googleUrl = 'https://www.google.com/search?q=' + encodeURIComponent(searchQuery) + searchLang;
 
             await page.goto(googleUrl);
+            await page.waitForURL(/search\?q/);
 
-            // ページの読み込みを待機
-            await page.waitForLoadState('networkidle', { timeout: 10000 }).catch(() => {});
-
-            // 検索結果を取得
             const results = await page.evaluate(() => {
-              const elements = document.querySelectorAll('.g');
+              const elements = document.querySelectorAll('div.g');
               return Array.from(elements)
                 .slice(0, 5)
                 .map((element) => {
                   const title = element.querySelector('h3')?.textContent || '';
-                  const snippet = element.querySelector('.VwiC3b')?.textContent || '';
-                  const link = element.querySelector('a')?.href || '';
+                  const snippet = element.querySelector('div[style*="webkit-line-clamp"]')?.textContent || '';
+                  const linkElement = element.querySelector('a') as HTMLAnchorElement;
+                  const link = linkElement?.href || '';
                   return { title, snippet, link };
                 });
             });
 
-            // 重複を避けながら結果を追加
             results.forEach(({ title, snippet, link }) => {
               if (title && snippet) {
                 searchResults.add(`${title}\n${snippet}\n${link}`);
               }
             });
 
-            // 十分な結果が得られた場合は次のテーマへ
             if (searchResults.size >= 5) break;
           } catch (error) {
             console.error(`Search error for query "${searchQuery}":`, error);
             continue;
           }
 
-          // 連続した検索の間に少し待機
           await page.waitForTimeout(1000);
         }
 

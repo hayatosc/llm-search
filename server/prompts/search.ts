@@ -42,9 +42,9 @@ export const createSearchPrompt = (prompt: string) => {
           keywords: ['ChatGPT usage', 'ChatGPT tutorial', 'ChatGPT guide'],
         },
       ],
-      searchInstructions: {
+      searchConfig: {
         lang: 'en',
-        instruction: 'Emphasize the importance of ChatGPT in the AI industry.',
+        instruction: 'Emphasize the importance of ChatGPT in the world.',
       }
     }
 
