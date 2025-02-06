@@ -8,7 +8,10 @@ export const SearchQuery = z.object({
 
 export const SearchQueries = z.object({
   searchThemes: SearchQuery.array(),
-  searchInstructions: z.string(),
+  searchConfig: z.object({
+    lang: z.union([z.literal('en'), z.literal('ja'), z.literal('ko'), z.literal('zh')]),
+    instruction: z.string(),
+  }),
 });
 
 export const createSearchPrompt = (prompt: string) => {
@@ -18,7 +21,7 @@ export const createSearchPrompt = (prompt: string) => {
     Please keep following this instruction to define the search query step-by-step.
   
     Method:
-    1. Seprate the user question into some sub-themes.
+    1. Seprate the user question into some sub-themes. Sub-themes are needed at least 3.
     2. Explain what each sub-theme is consisted of the user question.
     3. Propose some keywords for each sub-theme.
     4. Provide the search instruction for the next AI agent.
@@ -34,13 +37,21 @@ export const createSearchPrompt = (prompt: string) => {
           theme: 'What ChatGPT can make changes for our lives?',
           keywords: ['ChatGPT features', 'ChatGPT applications', 'ChatGPT use cases'],
         },
+        {
+          theme: 'How to use ChatGPT?',
+          keywords: ['ChatGPT usage', 'ChatGPT tutorial', 'ChatGPT guide'],
+        },
       ],
-      searchInstructions: 'Search in English. Use the keywords to find the most relevant information.'
+      searchInstructions: {
+        lang: 'en',
+        instruction: 'Emphasize the importance of ChatGPT in the AI industry.',
+      }
     }
 
     Points:
-    - Your return should be just an JSON object with the above structure.".
+    - Your return should be just an JSON object with the above structure.
     - Please think what langauge is most suitable for the search. If the user question is about Japanese polotics, Japanese sources are valuable.
+      - Available languages: 'en', 'ja', 'ko', 'zh'
     `),
     new HumanMessage(prompt),
   ];
