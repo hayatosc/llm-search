@@ -21,6 +21,7 @@ export const createSearchPrompt = (prompt: string) => {
     1. Seprate the user question into some sub-themes.
     2. Explain what each sub-theme is consisted of the user question.
     3. Propose some keywords for each sub-theme.
+    4. Provide the search instruction for the next AI agent.
 
     Output example:
     {
@@ -38,7 +39,7 @@ export const createSearchPrompt = (prompt: string) => {
     }
 
     Points:
-    - Your return should be an object with the above structure.
+    - Your return should be just an JSON object with the above structure.".
     - Please think what langauge is most suitable for the search. If the user question is about Japanese polotics, Japanese sources are valuable.
     `),
     new HumanMessage(prompt),

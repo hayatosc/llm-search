@@ -1,14 +1,17 @@
 import { ChatGoogleGenerativeAI } from '@langchain/google-genai';
-
 import { env } from 'hono/adapter';
 import { getContext } from 'hono/context-storage';
+import type { Env } from '../index';
 
-const { API_KEY } = env<{ API_KEY: string }>(getContext());
+export function createGeminiModel() {
+  const context = getContext<Env>();
+  const { MODEL_NAME, API_KEY } = env<Env['Bindings']>(context);
 
-export const geminiModel = new ChatGoogleGenerativeAI({
-  modelName: 'gemini-2.0-flash',
-  maxOutputTokens: 2048,
-  temperature: 0.5,
-  apiKey: API_KEY,
-  streaming: true,
-});
+  return new ChatGoogleGenerativeAI({
+    modelName: MODEL_NAME,
+    maxOutputTokens: 4096,
+    temperature: 0.5,
+    apiKey: API_KEY,
+    streaming: true,
+  });
+}
