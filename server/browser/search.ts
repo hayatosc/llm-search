@@ -5,7 +5,16 @@ import { SearchQueries } from '../prompts/search';
 
 type SearchQueriesType = z.infer<typeof SearchQueries>;
 
-export type SearchResult = { theme: string; results: string[] };
+export type SearchResultItem = {
+  title: string;
+  snippet: string;
+  link: string;
+};
+
+export type SearchResult = {
+  theme: string;
+  results: SearchResultItem[];
+};
 
 export class SearchBrowser {
   private browser: Browser | null = null;
@@ -29,7 +38,7 @@ export class SearchBrowser {
       throw new Error('Browser not initialized');
     }
 
-    const results: Array<{ theme: string; results: string[] }> = [];
+    const results: Array<SearchResult> = [];
     const context = await this.browser.newContext();
 
     try {
@@ -73,8 +82,8 @@ export class SearchBrowser {
             });
 
             results.forEach(({ title, snippet, link }) => {
-              if (title && snippet) {
-                searchResults.add(`${title}\n${snippet}\n${link}`);
+              if (title && snippet && link) {
+                searchResults.add(JSON.stringify({ title, snippet, link }));
               }
             });
 
@@ -89,7 +98,9 @@ export class SearchBrowser {
 
         results.push({
           theme: query.theme,
-          results: Array.from(searchResults).slice(0, 5),
+          results: Array.from(searchResults)
+            .slice(0, 5)
+            .map((result) => JSON.parse(result) as SearchResultItem),
         });
       }
     } finally {
