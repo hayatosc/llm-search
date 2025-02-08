@@ -37,7 +37,7 @@ export class ContentExtractor {
       for (const selector of selectors) {
         const element = document.querySelector(selector);
         if (element) {
-          return element.textContent || '';
+          return (element as HTMLElement).innerText || '';
         }
       }
 
@@ -53,8 +53,8 @@ export class ContentExtractor {
         });
       });
 
-      // クリーンなテキストを取得
-      const text = body.textContent || '';
+      // クリーンなテキストを innerText で取得
+      const text = body.innerText || '';
 
       // 元の表示状態を戻す
       elementsToRemove.forEach((selector) => {
@@ -64,10 +64,8 @@ export class ContentExtractor {
         });
       });
 
-      return text
-        .replace(/\s+/g, ' ') // 連続する空白を1つに
-        .replace(/\n+/g, '\n') // 連続する改行を1つに
-        .trim();
+      // 不要な空白・改行を整理して返す
+      return text.replace(/\s+/g, ' ').trim();
     });
   }
 
