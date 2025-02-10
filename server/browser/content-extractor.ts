@@ -1,6 +1,83 @@
-import type { Browser, Page } from 'playwright';
-import { chromium } from 'playwright';
+import type { Page } from 'playwright';
+import { BrowserManager } from './browser-manager';
 import type { SearchResult, SearchResultItem } from './search';
+
+// 定数の切り出し
+const mainSelectors = [
+  'main',
+  'article',
+  '.article',
+  '#article',
+  '.post-content',
+  '.entry-content',
+  '.content',
+  '#content',
+  '.main',
+  '#main',
+  '.doc',
+  '#doc',
+  '.documentation',
+  '#documentation',
+  '.text',
+  '#text',
+  'section',
+  '.blog-post',
+  '#blog-post',
+  '.news-article',
+  '#news-article',
+  '.post-body',
+  '#post-body',
+  '.article-body',
+  '#article-body',
+  '.article-content',
+  '#article-content',
+  '.post-content',
+  '#post-content',
+  '.blog-content',
+  '#blog-content',
+  '.news-content',
+  '#news-content',
+  '.text-content',
+  '#text-content',
+  '.main-content',
+  '#main-content',
+  '.main-article',
+  '#main-article',
+  '.post-article',
+  '#post-article',
+  '.blog-article',
+  '#blog-article',
+  '.news-article',
+  '#news-article',
+  '.story',
+  '.story-content',
+  '.post',
+  '.post-inner',
+  '.entry',
+  '.entry-inner',
+  '.page',
+  '.page-inner',
+  '.text-block',
+  '.text-wrapper',
+  '.content-area',
+  '.content-inner',
+  '.content-wrapper',
+  '.content-main',
+  '.article-text',
+  '.article-inner',
+  '.article-wrapper',
+  '.post-text',
+  '.post-inner',
+  '.post-wrapper',
+  '.blog-text',
+  '.blog-inner',
+  '.blog-wrapper',
+  '.news-text',
+  '.news-inner',
+  '.news-wrapper',
+];
+
+const removeSelectors = ['header', 'footer', 'nav', 'aside', 'style', 'script', 'noscript', '[role="complementary"]', '[role="navigation"]'];
 
 export interface ContentResultItem extends SearchResultItem {
   content: string;
@@ -11,105 +88,73 @@ export interface ContentResult {
   results: ContentResultItem[];
 }
 
-export class ContentExtractor {
-  private browser: Browser | null = null;
+export class ContentExtractor extends BrowserManager {
+  protected static instance: ContentExtractor;
 
-  async initialize(): Promise<void> {
-    this.browser = await chromium.launch({
-      channel: 'chrome',
-      headless: false, // reCAPTCHA対策
-    });
+  protected constructor() {
+    super();
   }
 
-  async close(): Promise<void> {
-    if (this.browser) {
-      await this.browser.close();
-      this.browser = null;
+  static getInstance(): ContentExtractor {
+    if (!ContentExtractor.instance) {
+      ContentExtractor.instance = new ContentExtractor();
     }
+    return ContentExtractor.instance;
   }
 
   private async extractMainContent(page: Page): Promise<string> {
     return await page.evaluate(() => {
-      // メインコンテンツを抽出するためのセレクタ候補
-      const selectors = ['article', 'main', '[role="main"]', '.main-content', '#main-content', '.post-content', '.article-content'];
-
-      // セレクタに基づいてメインコンテンツを探す
-      for (const selector of selectors) {
+      for (const selector of mainSelectors) {
         const element = document.querySelector(selector);
         if (element) {
-          return (element as HTMLElement).innerText || '';
+          return (element as HTMLElement).innerText.trim() || '';
         }
       }
-
-      // メインコンテンツが見つからない場合は、bodyから不要な要素を除外して取得
       const body = document.body;
-      const elementsToRemove = ['header', 'footer', 'nav', 'aside', 'style', 'script', 'noscript', '[role="complementary"]', '[role="navigation"]'];
-
-      // 不要な要素を非表示にする
-      elementsToRemove.forEach((selector) => {
-        const elements = document.querySelectorAll(selector);
-        elements.forEach((el) => {
+      removeSelectors.forEach((selector: string) => {
+        document.querySelectorAll(selector).forEach((el) => {
           (el as HTMLElement).style.display = 'none';
         });
       });
-
-      // クリーンなテキストを innerText で取得
-      const text = body.innerText || '';
-
-      // 元の表示状態を戻す
-      elementsToRemove.forEach((selector) => {
-        const elements = document.querySelectorAll(selector);
-        elements.forEach((el) => {
+      const text = body.innerText.replace(/\s+/g, ' ').trim();
+      removeSelectors.forEach((selector: string) => {
+        document.querySelectorAll(selector).forEach((el) => {
           (el as HTMLElement).style.display = '';
         });
       });
-
-      // 不要な空白・改行を整理して返す
-      return text.replace(/\s+/g, ' ').trim();
+      return text;
     });
   }
 
   async extractContent(searchResults: SearchResult[]): Promise<ContentResult[]> {
-    if (!this.browser) {
+    const browser = this.getBrowser();
+    if (!browser) {
       throw new Error('Browser not initialized');
     }
-
     const contentResults: ContentResult[] = [];
+    const context = await this.createContext();
     try {
       for (const searchResult of searchResults) {
         const extendedItems: ContentResultItem[] = [];
-
         for (const result of searchResult.results) {
           try {
-            const page = await this.browser.newPage();
+            const page = await context.newPage();
             await page.goto(result.link, { timeout: 30000 });
             await page.waitForURL(result.link, { timeout: 10000 }).catch(() => {});
             const content = await this.extractMainContent(page);
-
-            extendedItems.push({
-              ...result,
-              content,
-            });
-
+            extendedItems.push({ ...result, content });
             await page.close();
           } catch (error) {
             console.error(`Error extracting content from ${result.link}:`, error);
             continue;
           }
-
-          // レート制限対策
-          await new Promise((resolve) => setTimeout(resolve, 1000));
+          await this.delay(1000); // レート制限対策
         }
-
-        contentResults.push({
-          theme: searchResult.theme,
-          results: extendedItems,
-        });
+        contentResults.push({ theme: searchResult.theme, results: extendedItems });
       }
     } finally {
-      // ページは個別にcloseされるため、追加のクリーンアップは不要
+      await context.close();
     }
-
     return contentResults;
   }
 }

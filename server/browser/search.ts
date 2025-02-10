@@ -1,7 +1,7 @@
-import type { Browser } from 'playwright';
-import { chromium } from 'playwright';
+import type { Page } from 'playwright';
 import type { z } from 'zod';
 import { SearchQueries } from '../prompts/search';
+import { BrowserManager } from './browser-manager';
 
 type SearchQueriesType = z.infer<typeof SearchQueries>;
 
@@ -16,72 +16,69 @@ export type SearchResult = {
   results: SearchResultItem[];
 };
 
-export class SearchBrowser {
-  private browser: Browser | null = null;
+export class SearchBrowser extends BrowserManager {
+  private static instance: SearchBrowser;
 
-  async initialize(): Promise<void> {
-    this.browser = await chromium.launch({
-      channel: 'chrome',
-      headless: false, // reCAPTCHA対策
+  protected constructor() {
+    super();
+  }
+
+  static getInstance(): SearchBrowser {
+    if (!SearchBrowser.instance) {
+      SearchBrowser.instance = new SearchBrowser();
+    }
+    return SearchBrowser.instance;
+  }
+
+  // 言語パラメータの取得
+  private getLanguageParam(lang: string): string {
+    const langMap: Record<string, string> = {
+      ja: '&lr=lang_ja',
+      en: '&lr=lang_en',
+    };
+    return langMap[lang] || '';
+  }
+
+  // ページ内の検索結果抽出
+  private async extractResults(page: Page): Promise<SearchResultItem[]> {
+    return await page.evaluate(() => {
+      const elements = document.querySelectorAll('div.g');
+      return Array.from(elements)
+        .slice(0, 5)
+        .map((element) => {
+          const title = element.querySelector('h3')?.textContent || '';
+          const snippet = element.querySelector('div[style*="webkit-line-clamp"]')?.textContent || '';
+          const linkElement = element.querySelector('a') as HTMLAnchorElement;
+          const link = linkElement?.href || '';
+          return { title, snippet, link };
+        });
     });
   }
 
-  async close(): Promise<void> {
-    if (this.browser) {
-      await this.browser.close();
-      this.browser = null;
-    }
-  }
-
   async searchWithQueries(queries: SearchQueriesType): Promise<Array<SearchResult>> {
-    if (!this.browser) {
+    const browser = this.getBrowser();
+    if (!browser) {
       throw new Error('Browser not initialized');
     }
 
     const results: Array<SearchResult> = [];
-    const context = await this.browser.newContext();
+    const context = await this.createContext();
+    const searchLang = this.getLanguageParam(queries.searchConfig.lang);
 
     try {
-      // 言語設定の判定
-      let searchLang: string;
-      switch (queries.searchConfig.lang) {
-        case 'ja':
-          searchLang = '&lr=lang_ja';
-          break;
-        case 'en':
-          searchLang = '&lr=lang_en';
-          break;
-        default:
-          searchLang = '';
-      }
-
       for (const query of queries.searchThemes) {
         const page = await context.newPage();
         const searchResults = new Set<string>();
-
         const searchAttempts = [query.theme, ...query.keywords];
 
         for (const searchQuery of searchAttempts) {
           try {
             const googleUrl = 'https://www.google.com/search?q=' + encodeURIComponent(searchQuery) + searchLang;
-
             await page.goto(googleUrl);
             await page.waitForURL(/search\?q/);
 
-            const results = await page.evaluate(() => {
-              const elements = document.querySelectorAll('div.g');
-              return Array.from(elements)
-                .slice(0, 5)
-                .map((element) => {
-                  const title = element.querySelector('h3')?.textContent || '';
-                  const snippet = element.querySelector('div[style*="webkit-line-clamp"]')?.textContent || '';
-                  const linkElement = element.querySelector('a') as HTMLAnchorElement;
-                  const link = linkElement?.href || '';
-                  return { title, snippet, link };
-                });
-            });
-
-            results.forEach(({ title, snippet, link }) => {
+            const items = await this.extractResults(page);
+            items.forEach(({ title, snippet, link }) => {
               if (title && snippet && link) {
                 searchResults.add(JSON.stringify({ title, snippet, link }));
               }
@@ -93,7 +90,7 @@ export class SearchBrowser {
             continue;
           }
 
-          await page.waitForTimeout(1000);
+          await this.delay(1000);
         }
 
         results.push({
@@ -102,6 +99,8 @@ export class SearchBrowser {
             .slice(0, 5)
             .map((result) => JSON.parse(result) as SearchResultItem),
         });
+
+        await page.close();
       }
     } finally {
       await context.close();

@@ -3,6 +3,12 @@ import { contextStorage } from 'hono/context-storage';
 
 import { createLLMModel } from './llms';
 import { createSearchPrompt, SearchQueries } from './prompts/search';
+import { SearchBrowser } from './browser/search';
+import { ContentExtractor } from './browser/content-extractor';
+
+// シングルトンインスタンスを取得
+const searchBrowser = SearchBrowser.getInstance();
+const contentExtractor = ContentExtractor.getInstance();
 
 export type Env = {
   Bindings: {
@@ -23,10 +29,22 @@ app.get('/api/search', async (c) => {
   }
 
   try {
+    // LLMを使用してクエリを構造化
     const model = createLLMModel().withStructuredOutput(SearchQueries);
     const promptText = createSearchPrompt(query);
-    const response = await model.invoke(promptText);
-    return c.json(response);
+    const structuredQueries = await model.invoke(promptText);
+
+    // 各インスタンスの初期化
+    await searchBrowser.initialize();
+    await contentExtractor.initialize();
+
+    // 構造化されたクエリを使用して検索を実行
+    const searchResults = await searchBrowser.searchWithQueries(structuredQueries);
+
+    // 検索結果からコンテンツを抽出
+    const contentResults = await contentExtractor.extractContent(searchResults);
+
+    return c.json(contentResults);
   } catch (error) {
     const errorMessage = error instanceof Error ? error.message : 'Unknown error';
     const errorStack = error instanceof Error ? error.stack : '';
@@ -35,6 +53,11 @@ app.get('/api/search', async (c) => {
       stack: errorStack,
       error,
     });
+
+    // エラー発生時にはブラウザを再初期化
+    await searchBrowser.close();
+    await contentExtractor.close();
+
     return c.json({ error: errorMessage }, 500);
   }
 });
